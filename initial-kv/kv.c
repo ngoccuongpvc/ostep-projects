@@ -24,6 +24,31 @@ struct Record
     char *key, *value;
 };
 
+void free_record(struct Record *record)
+{
+    if (record == NULL)
+    {
+        return;
+    }
+    if (record->key != NULL)
+    {
+        free(record->key);
+    }
+    if (record->value != NULL)
+    {
+        free(record->value);
+    }
+}
+
+void free_command(struct Command *command)
+{
+    if (command->args != NULL)
+    {
+        free(command->args);
+    }
+    free(command);
+}
+
 enum Ops get_ops_enum(char *ops)
 {
     if (strcmp(ops, "p") == 0)
@@ -82,21 +107,71 @@ struct Command *parse_command(char *arg)
     return command;
 }
 
-void put(struct Record *records, int *n_records, char *k, char *v)
+int find(struct Record **records, int *n_records, char *k)
 {
     for (int i = 0; i < *n_records; ++i)
     {
-        if (strcmp(records[i].key, k) == 0)
+        if (strcmp((*records + i)->key, k) == 0)
         {
-            records[i].value = realloc(records[i].value, strlen(v));
-            strcpy(records[i].value, v);
-            break;
+            return i;
         }
     }
+    return -1;
+}
+
+void put(struct Record **records, int *n_records, char *k, char *v)
+{
+    int i = find(records, n_records, k);
+
+    if (i >= 0)
+    {
+        (*records + i)->value = realloc((*records + i)->value, strlen(v) + 1);
+        strcpy((*records + i)->value, v);
+        return;
+    }
     *n_records += 1;
-    realloc(records, sizeof(struct Record *) * (*n_records));
-    records[*n_records - 1].key = strdup(k);
-    records[*n_records - 1].value = strdup(v);
+    *records = realloc(*records, sizeof(struct Record) * (*n_records));
+    (*records + *n_records - 1)->key = strdup(k);
+    (*records + *n_records - 1)->value = strdup(v);
+}
+
+struct Record *get(struct Record **records, int *n_records, char *k)
+{
+    int i = find(records, n_records, k);
+
+    if (i >= 0)
+    {
+        printf("%s,%s\n", (*records + i)->key, (*records + i)->value);
+        return (*records + i);
+    }
+    printf("%s not found\n", k);
+    return NULL;
+}
+
+struct Record *all(struct Record **records, int *n_records)
+{
+    for (int i = 0; i < *n_records; ++i)
+    {
+        printf("%s,%s\n", (*records + i)->key, (*records + i)->value);
+    }
+    return *records;
+}
+
+void delete(struct Record **records, int *n_records, char *k)
+{
+    int i = find(records, n_records, k);
+
+    if (i >= 0)
+    {
+        (*n_records)--;
+        free_record(*records + i);
+        *(*records + i) = *(*records + (*n_records));
+
+        struct Record *new_records = malloc(sizeof(struct Record) * (*n_records));
+        memcpy(new_records, *records, sizeof(struct Record) * (*n_records));
+        free(*records);
+        *records = new_records;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -106,11 +181,24 @@ int main(int argc, char *argv[])
 
     for (int i = 1; i < argc; ++i)
     {
-        printf("%s\n", argv[i]);
         struct Command *command = parse_command(argv[i]);
-        if (command->ops == PUT) {
-            put(records, &n_records, command->args[0], command->args[1]);
+        if (command->ops == PUT)
+        {
+            put(&records, &n_records, command->args[0], command->args[1]);
         }
+        else if (command->ops == GET)
+        {
+            get(&records, &n_records, command->args[0]);
+        }
+        else if (command->ops == ALL)
+        {
+            all(&records, &n_records);
+        }
+        else if (command->ops == DELETE)
+        {
+            delete (&records, &n_records, command->args[0]);
+        }
+        free_command(command);
     }
     return 0;
 }
